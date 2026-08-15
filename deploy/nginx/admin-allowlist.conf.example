@@ -2,6 +2,16 @@
 #
 # Copy to admin-allowlist.conf on the host (same directory) and put your real
 # address in — the copy is gitignored so the address never reaches the repo.
+#
+# Behind the Cloudflare proxy the site is dual-stack: browsers usually arrive
+# over IPv6, so allowlist BOTH your IPv4 address and your IPv6 /64 prefix
+# (the interface half rotates daily via privacy extensions; the prefix is
+# what's stable).
+#
 # Apply changes with: docker compose -f docker-compose.prod.yml restart nginx
-allow 203.0.113.7;  # your IP here
+# (restart, not reload: the file is a single-file bind mount, and editors that
+# replace the file swap its inode — the running container keeps seeing the old
+# content until the mount is re-established by a restart.)
+allow 203.0.113.7;            # your IPv4 here
+allow 2001:db8:abcd:1234::/64;  # your IPv6 /64 prefix here
 deny all;
