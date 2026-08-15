@@ -44,6 +44,19 @@ variable "assets_bucket" {
   default     = "bahdashych-on-security"
 }
 
+variable "restrict_web_to_cloudflare" {
+  description = <<-EOT
+    When true (the default), ports 80/443 accept traffic only from Cloudflare's
+    published edge ranges (fetched live from cloudflare.com/ips at plan time),
+    so nobody can reach the origin around the proxy. Apply this ONLY while all
+    three DNS records are proxied (orange cloud) — with grey/DNS-only records
+    it takes the whole site down. Set to false to open 80/443 to the world
+    again before flipping records back to grey.
+  EOT
+  type        = bool
+  default     = true
+}
+
 variable "infra_repo_url" {
   description = "Public git URL of this repository; cloud-init clones it to /opt/blog on the host"
   type        = string
