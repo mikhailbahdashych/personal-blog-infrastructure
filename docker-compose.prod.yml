@@ -1,0 +1,61 @@
+# Production stack for mikhailbahdashych.me. Orchestrates all three apps from
+# GHCR behind nginx. Runs from the checkout of this repo at /opt/blog on the
+# host (cloud-init puts it there):
+#
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Secrets come from .env.prod (see .env.prod.example) — never commit it.
+services:
+  nginx:
+    # nginx:1.27-alpine, pinned by digest
+    image: nginx@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./deploy/nginx/blog.conf:/etc/nginx/conf.d/default.conf:ro
+      # Host-only copy of admin-allowlist.conf.example with the real IP.
+      - ./deploy/nginx/admin-allowlist.conf:/etc/nginx/admin-allowlist/admin-allowlist.conf:ro
+      - letsencrypt:/etc/letsencrypt:ro
+      - certbot-webroot:/var/www/certbot
+    depends_on:
+      - front
+      - api
+      - admin
+
+  certbot:
+    # certbot/certbot:v4.2.0, pinned by digest
+    image: certbot/certbot@sha256:9626d72120577cf72da4fc7948806e9993598981720a4cbe04340a502468d67b
+    restart: unless-stopped
+    entrypoint: /bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done'
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot-webroot:/var/www/certbot
+
+  # App images track :latest deliberately: the same trusted pipeline builds and
+  # deploys them, and every push is also tagged with the commit SHA — pin a
+  # specific ghcr.io/...:<sha> here to roll back.
+  front:
+    image: ghcr.io/mikhailbahdashych/personal-blog-front:latest
+    restart: unless-stopped
+    env_file: .env.prod
+    expose:
+      - '3000'
+
+  api:
+    image: ghcr.io/mikhailbahdashych/personal-blog-api:latest
+    restart: unless-stopped
+    env_file: .env.prod
+    expose:
+      - '4201'
+
+  admin:
+    image: ghcr.io/mikhailbahdashych/personal-blog-admin:latest
+    restart: unless-stopped
+    expose:
+      - '80'
+
+volumes:
+  letsencrypt:
+  certbot-webroot:

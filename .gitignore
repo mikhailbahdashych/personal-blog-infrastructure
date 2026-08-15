@@ -1,0 +1,15 @@
+# Terraform — local state carries every secret the stack knows; never commit.
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/terraform.tfvars
+terraform/crash.log
+
+# Host-only secrets and their local staging copies
+.env.prod
+deploy/nginx/admin-allowlist.conf
+
+# Keys
+*.pem
+deployer_key
+deployer_key.pub

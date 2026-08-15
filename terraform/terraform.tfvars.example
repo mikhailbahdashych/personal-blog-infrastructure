@@ -1,0 +1,7 @@
+# Copy to terraform.tfvars and fill in — terraform.tfvars is gitignored.
+
+# Public half of the deploy key pair (ssh-keygen -t ed25519 -f deployer_key).
+ssh_public_key = "ssh-ed25519 AAAA... blog-deployer"
+
+# openssl rand -hex 24
+db_master_password = ""

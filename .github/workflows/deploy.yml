@@ -1,0 +1,66 @@
+name: sync-host
+
+# The host runs the stack from a checkout of this repo at /opt/blog. When the
+# compose file or nginx config changes, pull the checkout and re-apply — the
+# app repos' own pipelines only roll their single service and never touch the
+# stack definition. Terraform changes deliberately stay manual (plan/apply from
+# an operator's machine); this workflow only syncs the runtime configuration.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - docker-compose.prod.yml
+      - deploy/**
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-infra
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Resolve runner IP
+        id: ip
+        run: echo "ip=$(curl -s https://checkip.amazonaws.com)" >> "$GITHUB_OUTPUT"
+
+      # SSH is closed by default; open it only for this runner, only for the
+      # duration of the sync (revoked below even when the sync fails).
+      - name: Open SSH to runner IP
+        run: |
+          aws ec2 authorize-security-group-ingress \
+            --group-id "${{ secrets.EC2_SG_ID }}" \
+            --protocol tcp --port 22 \
+            --cidr "${{ steps.ip.outputs.ip }}/32"
+
+      - name: Sync host
+        run: |
+          install -m 700 -d ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Pinned host key (EC2_SSH_HOST_KEY = `ssh-keyscan -t ed25519 <host>` output):
+          # an ephemeral runner has no TOFU history, so accept-new would trust
+          # any host that answers.
+          echo "${{ secrets.EC2_SSH_HOST_KEY }}" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+            "${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_HOST }}" \
+            'cd /opt/blog \
+             && git pull --ff-only \
+             && docker compose -f docker-compose.prod.yml up -d --remove-orphans \
+             && docker compose -f docker-compose.prod.yml exec -T nginx nginx -s reload'
+
+      - name: Revoke SSH access
+        if: always()
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id "${{ secrets.EC2_SG_ID }}" \
+            --protocol tcp --port 22 \
+            --cidr "${{ steps.ip.outputs.ip }}/32"

@@ -1,0 +1,7 @@
+# IP allowlist for admin.mikhailbahdashych.me.
+#
+# Copy to admin-allowlist.conf on the host (same directory) and put your real
+# address in — the copy is gitignored so the address never reaches the repo.
+# Apply changes with: docker compose -f docker-compose.prod.yml restart nginx
+allow 203.0.113.7;  # your IP here
+deny all;
