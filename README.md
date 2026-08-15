@@ -1,4 +1,4 @@
-# personal-blog-infrastructure
+# Personal Blog Infrastructure
 
 Infrastructure-as-code and deployment configuration for
 [mikhailbahdashych.me](https://mikhailbahdashych.me) — the blog
@@ -9,12 +9,35 @@ The app repos build and ship their own images; **everything about where and
 how they run lives here.**
 
 ```
-                    ┌──────────────────────── EC2 ────────────────────────┐
-Internet ──443──▶ nginx ──▶ front (Next SSR :3000)   ──▶ api (:4201) ──▶ RDS
-                    │  ├──▶ api   (NestJS  :4201)     ◀── revalidate ──┘
-                    │  └──▶ admin (static  :80)               │
-                    └── certbot (auto-renew)                  └──▶ S3 (assets)
+                              Internet
+                                 │
+              mikhailbahdashych.me · api.* · admin.*
+              (three DNS records → one Elastic IP)
+                                 │
+┌───────────────────────── EC2 · Docker Compose ─────────────────────────┐
+│                                │                                       │
+│                              nginx                                     │
+│              TLS + security headers, routes by hostname                │
+│              (admin.* is IP-allowlisted before auth)                   │
+│                                                                        │
+│        apex ▼               api.* ▼              admin.* ▼             │
+│    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐            │
+│    │    front     │    │     api      │    │    admin     │            │
+│    │ Next.js SSR  │    │    NestJS    │    │  static SPA  │            │
+│    └──────────────┘    └──────┬───────┘    └──────────────┘            │
+│                               │                                        │
+│    certbot — auto-renews the TLS certificate                           │
+└───────────────────────────────┼────────────────────────────────────────┘
+                                │
+                 ┌──────────────┴──────────────┐
+                 ▼                             ▼
+         RDS PostgreSQL                    S3 bucket
+        (content, private)             (uploaded assets)
 ```
+
+Not pictured: `front` fetches page data from `api` over the internal Docker
+network, and `api` calls `front` back to invalidate cached pages after admin
+edits — that traffic never leaves the instance.
 
 ## Repository layout
 
