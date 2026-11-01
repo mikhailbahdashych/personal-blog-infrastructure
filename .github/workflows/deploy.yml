@@ -41,6 +41,10 @@ jobs:
             --protocol tcp --port 22 \
             --cidr "${{ steps.ip.outputs.ip }}/32"
 
+      # nginx configs are single-file bind mounts: `git pull` replaces the
+      # file (new inode) and the running container keeps the old one, so a
+      # reload would re-read stale config. Test the new config in a throwaway
+      # container, then restart to re-mount it.
       - name: Sync host
         run: |
           install -m 700 -d ~/.ssh
@@ -54,8 +58,9 @@ jobs:
             "${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_HOST }}" \
             'cd /opt/blog \
              && git pull --ff-only \
+             && docker compose -f docker-compose.prod.yml run --rm --no-deps -T nginx nginx -t \
              && docker compose -f docker-compose.prod.yml up -d --remove-orphans \
-             && docker compose -f docker-compose.prod.yml exec -T nginx nginx -s reload'
+             && docker compose -f docker-compose.prod.yml restart nginx'
 
       - name: Revoke SSH access
         if: always()

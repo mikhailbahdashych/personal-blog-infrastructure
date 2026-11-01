@@ -81,7 +81,9 @@ it, and pipelines update it with plain `git pull`.
   `.env.prod.example`); the admin image is fully static.
 - `certbot` — wakes twice a day and renews the Let's Encrypt certificate via
   webroot when it's due. nginx mounts the same `blog_letsencrypt` volume
-  read-only. One certificate covers all three hostnames.
+  read-only and reloads itself every 6 hours to pick up a renewed
+  certificate (certbot can't signal another container). One certificate
+  covers all three hostnames.
 
 **RDS PostgreSQL** (`db.t4g.micro`, encrypted, 7-day backups, deletion
 protection on) is not reachable from the internet: `publicly_accessible =
@@ -155,7 +157,7 @@ pattern:
 | personal-blog-api | push to master | image → GHCR, roll `api`, run DB migrations |
 | personal-blog-front | push to master | test → image → GHCR, roll `front` |
 | personal-blog-admin | push to master | test → image → GHCR, roll `admin` |
-| **this repo** | push touching compose/nginx | `git pull` at `/opt/blog`, re-apply the stack, reload nginx |
+| **this repo** | push touching compose/nginx | `git pull` at `/opt/blog`, test the nginx config, re-apply the stack, restart nginx |
 
 The app pipelines never touch the stack definition; this repo's pipeline
 never touches app images. **Terraform is applied manually on purpose** —
@@ -325,9 +327,16 @@ the world. The reverse order blackholes all traffic. nginx needs no change
 in either direction — real-IP restoration only activates for connections
 from Cloudflare.
 
-**TLS** — renewals are automatic (certbot container). To re-issue from
-scratch: stop the stack, remove the `blog_letsencrypt` volume, re-run
-`bootstrap.sh`.
+**TLS** — certbot renews about 30 days before expiry; nginx picks the new
+certificate up within 6 hours (its reload loop). To check what nginx is
+actually serving, on the host:
+`echo | openssl s_client -connect 127.0.0.1:443 -servername mikhailbahdashych.me 2>/dev/null | openssl x509 -noout -enddate`.
+To re-issue from scratch: stop the stack, remove the `blog_letsencrypt`
+volume, re-run `bootstrap.sh`.
+
+**nginx config changes** need a `restart nginx`, not `nginx -s reload`: the
+configs are single-file bind mounts, and `git pull` swaps the file's inode,
+so a reload re-reads the old content. The sync-host workflow does this.
 
 **Rotating credentials**
 - deploy key: new key pair → `terraform apply` (replaces the EC2 key pair —
