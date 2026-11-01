@@ -10,6 +10,9 @@ services:
     # nginx:1.27-alpine, pinned by digest
     image: nginx@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
     restart: unless-stopped
+    # nginx reads certificates only at start/reload, and certbot (another
+    # container) can't signal it — reload every 6h so renewals go live.
+    command: /bin/sh -c 'while :; do sleep 21600; nginx -s reload; done & exec nginx -g "daemon off;"'
     ports:
       - '80:80'
       - '443:443'
